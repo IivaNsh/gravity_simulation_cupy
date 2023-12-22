@@ -1,5 +1,9 @@
 import cupy as cp
 import numpy as np
+import subprocess
+
+
+
 
 culc_gravity = cp.RawKernel(r'''
 extern "C" __global__
@@ -13,7 +17,8 @@ void culc_gravity(float* pos_x_in, float* pos_y_in, float* pos_x_out, float* pos
         float dx = pos_x_in[i]-pos_x_in[idx];
         float dy = pos_y_in[i]-pos_y_in[idx];
         float d = max(sqrtf(dx*dx + dy*dy), 0.01f);
-        float acc = mas[i]/(d*d);
+        float x = d+2;
+        float acc = mas[i]*(powf(x,-2.0));
         acc_x_n += acc*dx/d;
         acc_y_n += acc*dy/d;
     }
@@ -29,26 +34,29 @@ void culc_gravity(float* pos_x_in, float* pos_y_in, float* pos_x_out, float* pos
 
 
 n1 = 8
-n2 = 8
+n2 = 16
 N = n1*n2
 
 
-dt = 0.01
+dt = 0.05
 scale = 0.1
 
-pos_x_in = (cp.random.random((N,N), dtype = cp.float32)-0.5)*20
-pos_y_in = (cp.random.random((N,N), dtype = cp.float32)-0.5)*20
+pos_x_in = (cp.random.random((N,N), dtype = cp.float32)-0.5)*150
+pos_y_in = (cp.random.random((N,N), dtype = cp.float32)-0.5)*150
 pos_x_out = cp.zeros((N,N), dtype = cp.float32)
 pos_y_out = cp.zeros((N,N), dtype = cp.float32)
 
+V=0.1
 vel_x_in = cp.zeros((N,N), dtype=cp.float32)
 vel_y_in = cp.zeros((N,N), dtype=cp.float32)
 for i in range(0, N):
     for j in range(0, N):
-        a = np.arctan2(pos_x_in[i,j], pos_y_in[i,j])
-        r = np.sqrt(pos_x_in[i,j]**2+pos_y_in[i,j]**2)
-        vel_x_in[i,j] += cp.cos(a)*1
-        vel_y_in[i,j] -= cp.sin(a)*1
+        x=pos_x_in[i,j]
+        y=pos_y_in[i,j]
+        a = np.arctan2(x, y)
+        r = np.sqrt(x**2+y**2)
+        vel_x_in[i,j] += cp.cos(a)*V*r
+        vel_y_in[i,j] -= cp.sin(a)*V*r
 
 vel_x_out = cp.zeros((N,N), dtype=cp.float32)
 vel_y_out = cp.zeros((N,N), dtype=cp.float32)
@@ -57,12 +65,12 @@ acc_x = cp.zeros((N,N), dtype=cp.float32)
 acc_y = cp.zeros((N,N), dtype=cp.float32)
 
 
-mas = cp.zeros((N,N), dtype=cp.float32)
-for i in range(0, N):
-    for j in range(0, N):
-        a = np.arctan2(pos_x_in[i,j]-10, pos_y_in[i,j]-10)
-        r = np.sqrt(pos_x_in[i,j]**2+pos_y_in[i,j]**2)
-        mas[i,j] = 1/((r+1)*(r+1))
+mas = cp.random.random((N,N), dtype=cp.float32)*1
+#for i in range(0, N):
+#    for j in range(0, N):
+#        a = np.arctan2(pos_x_in[i,j]-10, pos_y_in[i,j]-10)
+#        r = np.sqrt(pos_x_in[i,j]**2+pos_y_in[i,j]**2)
+#        mas[i,j] = 1/((r+1)*(r+1))
 
 
 
@@ -70,14 +78,14 @@ for i in range(0, N):
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-T = 100
+T = 400
 
 plt.style.use('dark_background')
 fig = plt.figure()
 ax = fig.subplots()
 ax.set_aspect('equal', 'box')
-ax.set_xlim([-16,16])
-ax.set_ylim([-16,16])
+ax.set_xlim([-25,25])
+ax.set_ylim([-25,25])
 ax.axis("off")
 
 
@@ -111,12 +119,35 @@ def update(frame):
     return PLOT
 
 
-ani = animation.FuncAnimation(fig=fig, func=update, frames=T, interval=50)
+#canvas_width, canvas_height = fig.canvas.get_width_height()
+### Open an ffmpeg process
+#outf = 'test.mp4'
+#cmdstring = ('ffmpeg', "-b:v", "1K"
+#             '-y', '-r', '1', # overwrite, 1fps
+#             '-s', '%dx%d' % (canvas_width, canvas_height), # size of image string
+#             '-pix_fmt', 'argb', # format
+#             '-f', 'rawvideo',  '-i', '-', # tell ffmpeg to expect raw video from the pipe
+#             '-vcodec', 'mpeg4', outf) # output encoding
+#p = subprocess.Popen(cmdstring, stdin=subprocess.PIPE)
+#
+## Draw frames and write to the pipe
+#for frame in range(T):
+#    # draw the frame
+#    update(frame)
+#    fig.canvas.draw()
+#    # extract the image as an ARGB string
+#    string = fig.canvas.tostring_argb()
+#    # write to pipe
+#    p.stdin.write(string)
+#p.communicate()
 
-dpi = 300
-writer = animation.writers['ffmpeg'](fps=35)
-ani.save('test.mp4',writer=writer,dpi=dpi)
 
+ani = animation.FuncAnimation(fig=fig, func=update, frames=T, interval=1)
+
+#dpi = 300
+#writer = animation.writers['ffmpeg'](fps=35)
+#ani.save('test.mp4',writer=writer,dpi=dpi)
+#ani.save('test.gif', writer='imagemagick', fps=30)
 
 
 plt.show()
